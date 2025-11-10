@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, status, Request
 from pydantic import BaseModel, Field, conint
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Any
 import logging
 import uvicorn
 import os
@@ -14,9 +14,31 @@ import ollama
 
 # ======== Configuration ========
 load_dotenv()
+
+# Global settings
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+QDRANT_FORCE_IGNORE_SSL = os.getenv("QDRANT_FORCE_IGNORE_SSL", "false").lower() == "true"
+
+# Development environment configuration
+DEV_QDRANT_URL = os.getenv("DEV_QDRANT_URL", "")
+DEV_QDRANT_API_KEY = os.getenv("DEV_QDRANT_API_KEY", "")
+DEV_QDRANT_VERIFY_SSL = os.getenv("DEV_QDRANT_VERIFY_SSL", "false").lower() == "true"
+
+# Production environment configuration
+PROD_QDRANT_URL = os.getenv("PROD_QDRANT_URL", "")
+PROD_QDRANT_API_KEY = os.getenv("PROD_QDRANT_API_KEY", "")
+PROD_QDRANT_VERIFY_SSL = os.getenv("PROD_QDRANT_VERIFY_SSL", "true").lower() == "true"
+
+# Fallback configuration (backward compatibility)
+QDRANT_URL = os.getenv("QDRANT_URL", "")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
+QDRANT_VERIFY_SSL = os.getenv("QDRANT_VERIFY_SSL", "true").lower() == "true"
 QDRANT_HOST = os.getenv("QDRANT_HOST", "192.168.153.47")
+
+# Other services
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "192.168.153.46")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
+CONTEXT_WINDOW_SIZE = int(os.getenv("CONTEXT_WINDOW_SIZE", "5"))
 # ===============================
 
 # ======== Logging Setup ========
@@ -40,6 +62,48 @@ handler.addFilter(CorrelationIdFilter())
 logger.addHandler(handler)
 # ===============================
 
+# ======== Configuration Validation ========
+def validate_production_config():
+    """Validate configuration based on environment mode"""
+    if ENVIRONMENT == "production":
+        # Determine which URL to check (PROD_QDRANT_URL takes precedence)
+        qdrant_url = PROD_QDRANT_URL or QDRANT_URL or f"http://{QDRANT_HOST}"
+        
+        # Require HTTPS in production
+        if not qdrant_url.startswith("https://"):
+            logger.error(
+                "Production mode requires HTTPS connection to Qdrant",
+                extra={"qdrant_url": qdrant_url}
+            )
+            raise ValueError("Production mode requires QDRANT_URL or PROD_QDRANT_URL with https:// scheme")
+        
+        # Require API key in production
+        api_key = PROD_QDRANT_API_KEY or QDRANT_API_KEY
+        if not api_key:
+            logger.error("Production mode requires QDRANT_API_KEY or PROD_QDRANT_API_KEY to be configured")
+            raise ValueError("Production mode requires QDRANT_API_KEY or PROD_QDRANT_API_KEY")
+        
+        logger.info("Production configuration validated successfully", extra={
+            "https_enabled": True,
+            "api_key_configured": True
+        })
+    else:
+        # Log development mode configuration
+        dev_url = DEV_QDRANT_URL or QDRANT_URL or f"http://{QDRANT_HOST}"
+        dev_api_key = DEV_QDRANT_API_KEY or QDRANT_API_KEY
+        
+        logger.info(
+            "Running in development mode",
+            extra={
+                "https_enabled": dev_url.startswith("https://") if dev_url else False,
+                "api_key_configured": bool(dev_api_key)
+            }
+        )
+
+# Validate configuration at startup
+validate_production_config()
+# ===============================
+
 # ======== Exception Classes ========
 class SearchException(Exception):
     """Base exception for search-related errors"""
@@ -52,28 +116,190 @@ class QdrantConnectionError(SearchException):
 # ===============================
 
 class SearchSystem:
-    _qdrant_pool = None
+    _qdrant_pool_dev = None
+    _qdrant_pool_prod = None
     _ollama_pool = None
 
-    def __init__(self, collection_name: str):
+    def __init__(self, collection_name: str, use_production: bool = False,
+                 qdrant_url: Optional[str] = None, 
+                 qdrant_api_key: Optional[str] = None, 
+                 qdrant_verify_ssl: Optional[bool] = None,
+                 context_window_size: Optional[int] = None):
         self.collection_name = collection_name
-        self.qclient = self._get_qdrant_client()
+        self.context_window_size = context_window_size if context_window_size is not None else CONTEXT_WINDOW_SIZE
+        self.use_custom_client = any([qdrant_url, qdrant_api_key, qdrant_verify_ssl is not None])
+        
+        # Validate: cannot use both use_production flag and custom parameters
+        if self.use_custom_client and use_production:
+            raise ValueError("Cannot use both use_production flag and custom Qdrant parameters")
+        
+        if self.use_custom_client:
+            # Create custom client for this request (ignore use_production)
+            self.qclient = self._create_qdrant_client(
+                qdrant_url, qdrant_api_key, qdrant_verify_ssl, use_production=False, is_pooled=False
+            )
+            self.custom_client = True
+        else:
+            # Use pooled client (dev or prod based on use_production flag)
+            self.qclient = self._get_qdrant_client(use_production)
+            self.custom_client = False
+        
         self.oclient = self._get_ollama_client()
         self._ensure_collection()
 
-    @classmethod
-    def _get_qdrant_client(cls):
-        if cls._qdrant_pool is None:
+    def __del__(self):
+        """Close custom client when instance is destroyed"""
+        if self.custom_client and hasattr(self, 'qclient'):
             try:
-                cls._qdrant_pool = QdrantClient(
-                    host=QDRANT_HOST,
-                    timeout=10,
-                    prefer_grpc=True
+                self.qclient.close()
+            except:
+                pass
+
+    @staticmethod
+    def _create_qdrant_client(qdrant_url: Optional[str] = None,
+                             qdrant_api_key: Optional[str] = None,
+                             qdrant_verify_ssl: Optional[bool] = None,
+                             use_production: bool = False,
+                             is_pooled: bool = False) -> QdrantClient:
+        """
+        Create a Qdrant client with configuration priority:
+        1. Request parameters (qdrant_url, qdrant_api_key, qdrant_verify_ssl)
+        2. Environment-specific variables (DEV_* or PROD_* based on use_production)
+        3. Generic environment variables (QDRANT_URL, QDRANT_API_KEY, QDRANT_VERIFY_SSL)
+        4. Defaults (QDRANT_HOST with http://, no API key, verify SSL for HTTPS)
+        """
+        from urllib.parse import urlparse
+        
+        # Determine environment-specific variables
+        if use_production:
+            env_url = PROD_QDRANT_URL
+            env_api_key = PROD_QDRANT_API_KEY
+            env_verify_ssl = PROD_QDRANT_VERIFY_SSL
+            env_name = "production"
+        else:
+            env_url = DEV_QDRANT_URL
+            env_api_key = DEV_QDRANT_API_KEY
+            env_verify_ssl = DEV_QDRANT_VERIFY_SSL
+            env_name = "development"
+        
+        # Priority: Request param > Environment-specific > Generic env > Default
+        final_url = qdrant_url or env_url or QDRANT_URL or f"http://{QDRANT_HOST}"
+        final_api_key = qdrant_api_key or env_api_key or QDRANT_API_KEY or None
+        
+        # Parse URL to extract protocol, host, port
+        parsed_url = urlparse(final_url)
+        protocol = parsed_url.scheme or "http"
+        host = parsed_url.hostname
+        port = parsed_url.port
+        
+        # Determine if using HTTPS
+        use_https = protocol == "https"
+        
+        # SSL verification priority
+        if qdrant_verify_ssl is not None:
+            # Priority 1: Request parameter
+            verify_ssl = qdrant_verify_ssl
+            config_source = "request_parameter"
+        elif QDRANT_FORCE_IGNORE_SSL:
+            # Priority 2: Force ignore SSL
+            verify_ssl = False
+            config_source = "QDRANT_FORCE_IGNORE_SSL"
+        elif use_https:
+            # Priority 3: Environment-specific > Generic env > Default
+            verify_ssl = env_verify_ssl if env_url else QDRANT_VERIFY_SSL
+            if env_url:
+                config_source = f"{'PROD' if use_production else 'DEV'}_QDRANT_VERIFY_SSL"
+            elif "QDRANT_VERIFY_SSL" in os.environ:
+                config_source = "QDRANT_VERIFY_SSL"
+            else:
+                config_source = "default"
+        else:
+            # HTTP doesn't use SSL
+            verify_ssl = False
+            config_source = "not_applicable"
+        
+        # Build client parameters
+        client_params = {
+            "host": host,
+            "timeout": 10,
+            "prefer_grpc": True
+        }
+        
+        # Add port if specified
+        if port:
+            client_params["port"] = port
+        
+        # Add HTTPS configuration
+        if use_https:
+            client_params["https"] = True
+            client_params["verify"] = verify_ssl
+        
+        # Add API key if provided
+        if final_api_key:
+            client_params["api_key"] = final_api_key
+        
+        # Determine configuration sources for logging
+        if qdrant_url:
+            url_source = "request_parameter"
+        elif env_url:
+            url_source = f"{'PROD' if use_production else 'DEV'}_QDRANT_URL"
+        elif QDRANT_URL:
+            url_source = "QDRANT_URL"
+        else:
+            url_source = "QDRANT_HOST"
+        
+        if qdrant_api_key:
+            api_key_source = "request_parameter"
+        elif env_api_key:
+            api_key_source = f"{'PROD' if use_production else 'DEV'}_QDRANT_API_KEY"
+        elif QDRANT_API_KEY:
+            api_key_source = "QDRANT_API_KEY"
+        else:
+            api_key_source = "none"
+        
+        # Log connection details (without API key)
+        logger.info(
+            "Initializing Qdrant connection",
+            extra={
+                "connection_type": "pooled" if is_pooled else "custom",
+                "environment_mode": env_name,
+                "protocol": protocol,
+                "host": host,
+                "port": port,
+                "https": use_https,
+                "verify_ssl": verify_ssl if use_https else None,
+                "authenticated": bool(final_api_key),
+                "global_environment": ENVIRONMENT,
+                "config_sources": {
+                    "url": url_source,
+                    "api_key": api_key_source,
+                    "verify_ssl": config_source
+                }
+            }
+        )
+        
+        return QdrantClient(**client_params)
+
+    @classmethod
+    def _get_qdrant_client(cls, use_production: bool = False):
+        """Get pooled Qdrant client using environment configuration"""
+        pool_attr = '_qdrant_pool_prod' if use_production else '_qdrant_pool_dev'
+        
+        if getattr(cls, pool_attr) is None:
+            try:
+                client = cls._create_qdrant_client(
+                    qdrant_url=None,
+                    qdrant_api_key=None,
+                    qdrant_verify_ssl=None,
+                    use_production=use_production,
+                    is_pooled=True
                 )
+                setattr(cls, pool_attr, client)
             except Exception as e:
                 logger.error(f"Qdrant connection failed: {str(e)}")
                 raise QdrantConnectionError("Database connection error")
-        return cls._qdrant_pool
+        
+        return getattr(cls, pool_attr)
 
     @classmethod
     def _get_ollama_client(cls):
@@ -110,9 +336,10 @@ class SearchSystem:
 
     def _get_context_pages(self, filename: str, center_page_number: int) -> List[Dict]:
         try:
+            window_size = self.context_window_size
             page_range = models.Range(
-                gte=max(0, center_page_number - 5),
-                lte=min(1000, center_page_number + 5)
+                gte=max(0, center_page_number - window_size),
+                lte=min(1000, center_page_number + window_size)
             )
             
             scroll_result = self.qclient.scroll(
@@ -130,7 +357,7 @@ class SearchSystem:
                     ]
                 ),
                 with_payload=True,
-                limit=11
+                limit=(window_size * 2) + 1
             )
             
             points = scroll_result[0]  
@@ -155,29 +382,142 @@ class SearchSystem:
             logger.error(f"Embedding generation failed: {str(e)}")
             raise EmbeddingError("Failed to process query") from e
 
+    def _build_filter_conditions(self, filter_dict: Optional[Dict]) -> Optional[models.Filter]:
+        """
+        Build Qdrant filter from filter dictionary.
+        
+        Supports:
+        - match_text: single string or array of strings (OR logic within field)
+        - match_value: single value or array of values (OR logic within field)
+        - gte/lte: range conditions for numeric fields
+        
+        All top-level field conditions are combined with AND logic.
+        
+        Args:
+            filter_dict: Dictionary mapping field paths to condition dictionaries
+            
+        Returns:
+            Qdrant Filter object or None if no valid conditions
+            
+        Examples:
+            >>> # Array text filter
+            >>> filter_dict = {
+            ...     "metadata.category": {
+            ...         "match_text": ["devops", "cloud"]
+            ...     }
+            ... }
+            
+            >>> # Range filter
+            >>> filter_dict = {
+            ...     "metadata.year": {
+            ...         "gte": 2020,
+            ...         "lte": 2024
+            ...     }
+            ... }
+        """
+        if not filter_dict:
+            return None
+        
+        must_conditions = []
+        
+        try:
+            for field_path, condition in filter_dict.items():
+                # Handle match_text
+                if "match_text" in condition:
+                    condition_value = condition["match_text"]
+                    
+                    if isinstance(condition_value, list):
+                        # Array of text values - use OR logic with should conditions
+                        if len(condition_value) == 0:
+                            logger.warning(f"Empty array for match_text on field {field_path}, skipping")
+                            continue
+                        
+                        should_conditions = []
+                        for text_value in condition_value:
+                            should_conditions.append(
+                                models.FieldCondition(
+                                    key=field_path,
+                                    match=models.MatchText(text=str(text_value))
+                                )
+                            )
+                        # Wrap should conditions in a Filter for OR logic
+                        must_conditions.append(
+                            models.Filter(should=should_conditions)
+                        )
+                    else:
+                        # Single text value
+                        must_conditions.append(
+                            models.FieldCondition(
+                                key=field_path,
+                                match=models.MatchText(text=str(condition_value))
+                            )
+                        )
+                
+                # Handle match_value
+                elif "match_value" in condition:
+                    condition_value = condition["match_value"]
+                    
+                    if isinstance(condition_value, list):
+                        # Array of values - use MatchAny for OR logic
+                        if len(condition_value) == 0:
+                            logger.warning(f"Empty array for match_value on field {field_path}, skipping")
+                            continue
+                        
+                        must_conditions.append(
+                            models.FieldCondition(
+                                key=field_path,
+                                match=models.MatchAny(any=condition_value)
+                            )
+                        )
+                    else:
+                        # Single value
+                        must_conditions.append(
+                            models.FieldCondition(
+                                key=field_path,
+                                match=models.MatchValue(value=condition_value)
+                            )
+                        )
+                
+                # Handle range conditions (gte/lte)
+                elif "gte" in condition or "lte" in condition:
+                    range_params = {}
+                    if "gte" in condition:
+                        range_params["gte"] = condition["gte"]
+                    if "lte" in condition:
+                        range_params["lte"] = condition["lte"]
+                    
+                    # Validate range makes sense
+                    if "gte" in range_params and "lte" in range_params:
+                        if range_params["gte"] > range_params["lte"]:
+                            logger.warning(f"Invalid range on field {field_path}: gte ({range_params['gte']}) > lte ({range_params['lte']})")
+                    
+                    must_conditions.append(
+                        models.FieldCondition(
+                            key=field_path,
+                            range=models.Range(**range_params)
+                        )
+                    )
+                else:
+                    logger.warning(f"Unknown condition type for field {field_path}: {condition}")
+            
+            if must_conditions:
+                logger.debug(f"Built filter with {len(must_conditions)} conditions")
+                return models.Filter(must=must_conditions)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Filter processing failed: {str(e)}", extra={
+                "filter": filter_dict,
+                "correlation_id": correlation_id.get()
+            })
+            raise SearchException("Invalid filter configuration") from e
+
     def batch_search(self, search_queries: List[str], filter: Optional[Dict], 
                     limit: int = 5, embedding_model: str = "mxbai-embed-large") -> List[List[Dict]]:
         try:
-            filter_ = None
-            if filter:
-                must_conditions = []
-                for field_path, condition in filter.items():
-                    if "match_text" in condition:
-                        must_conditions.append(
-                            models.FieldCondition(
-                                key=field_path,
-                                match=models.MatchText(text=condition["match_text"])
-                            )
-                        )
-                    elif "match_value" in condition:
-                        must_conditions.append(
-                            models.FieldCondition(
-                                key=field_path,
-                                match=models.MatchValue(value=condition["match_value"])
-                            )
-                        )
-                if must_conditions:
-                    filter_ = models.Filter(must=must_conditions)
+            # Build filter conditions using the new helper method
+            filter_ = self._build_filter_conditions(filter)
 
             search_requests = []
             for query in search_queries:
@@ -237,9 +577,14 @@ app.add_middleware(
 class SearchRequest(BaseModel):
     collection_name: str = Field(..., min_length=1, description="Name of the Qdrant collection")
     search_queries: List[str] = Field(..., min_items=1, description="List of search queries")
-    filter: Optional[Dict[str, Dict[str, Union[str, int, float, bool]]]] = Field(None, description="Filter conditions. Each key is a metadata field path, value is a dict with 'match_text' or 'match_value'.")
+    filter: Optional[Dict[str, Dict[str, Any]]] = Field(None, description="Filter conditions. Each key is a metadata field path, value is a dict with 'match_text', 'match_value', 'gte', or 'lte'. Values can be single values or arrays for OR logic.")
     embedding_model: Optional[str] = Field(default="mxbai-embed-large", description="Ollama embedding model name")
     limit: Optional[conint(ge=1)] = Field(default=5, description="Maximum number of results per query")
+    context_window_size: Optional[conint(ge=0)] = Field(default=None, description="Number of pages before/after match to retrieve. Overrides CONTEXT_WINDOW_SIZE env var.")
+    use_production: Optional[bool] = Field(default=False, description="Use production environment configuration (PROD_* variables)")
+    qdrant_url: Optional[str] = Field(default=None, description="Override Qdrant URL for this request")
+    qdrant_api_key: Optional[str] = Field(default=None, description="Override Qdrant API key for this request")
+    qdrant_verify_ssl: Optional[bool] = Field(default=None, description="Override SSL verification for this request")
 
 @app.middleware("http")
 async def add_correlation_id(request: Request, call_next):
@@ -268,7 +613,7 @@ async def health_check():
     return {
         "status": "ok",
         "services": {
-            "qdrant": "ok" if SearchSystem._qdrant_pool else "offline",
+            "qdrant": "ok" if (SearchSystem._qdrant_pool_dev or SearchSystem._qdrant_pool_prod) else "offline",
             "ollama": "ok" if SearchSystem._ollama_pool else "offline"
         }
     }
@@ -276,12 +621,28 @@ async def health_check():
 @app.post("/search", status_code=status.HTTP_200_OK)
 async def search(request: Request, search_request: SearchRequest):
     try:
+        # Log request with connection configuration
         logger.info("Search request received", extra={
             "collection": search_request.collection_name,
-            "query_count": len(search_request.search_queries)
+            "query_count": len(search_request.search_queries),
+            "use_production": search_request.use_production,
+            "custom_config": any([
+                search_request.qdrant_url,
+                search_request.qdrant_api_key,
+                search_request.qdrant_verify_ssl is not None
+            ])
         })
         
-        system = SearchSystem(collection_name=search_request.collection_name)
+        # Create SearchSystem with connection parameters
+        system = SearchSystem(
+            collection_name=search_request.collection_name,
+            use_production=search_request.use_production,
+            qdrant_url=search_request.qdrant_url,
+            qdrant_api_key=search_request.qdrant_api_key,
+            qdrant_verify_ssl=search_request.qdrant_verify_ssl,
+            context_window_size=search_request.context_window_size
+        )
+        
         results = system.batch_search(
             search_queries=search_request.search_queries,
             filter=search_request.filter,
@@ -294,6 +655,13 @@ async def search(request: Request, search_request: SearchRequest):
         })
         return {"results": results}
     
+    except ValueError as e:
+        # Handle validation errors (e.g., conflicting parameters)
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except SearchException as e:
         logger.error(f"Search error: {str(e)}")
         raise HTTPException(

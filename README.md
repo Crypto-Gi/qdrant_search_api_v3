@@ -320,37 +320,139 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 Create a `.env` file in the project root with the following variables:
 
 ```bash
-# Qdrant Configuration
-QDRANT_HOST=192.168.153.47          # Qdrant server hostname/IP
-QDRANT_PORT=6334                     # Qdrant gRPC port (optional)
-
-# Ollama Configuration
-OLLAMA_HOST=192.168.153.46           # Ollama server hostname/IP
-OLLAMA_PORT=11434                    # Ollama port (optional)
-
-# API Configuration
+# ===== Global Settings =====
+ENVIRONMENT=development              # "development" or "production"
+DEBUG=false                          # Enable debug logging
 REQUEST_TIMEOUT=30                   # Request timeout in seconds
-CONTEXT_WINDOW_SIZE=5                # Default pages before/after match
-DEBUG=false                           # Enable debug logging (true/false)
+
+# ===== Development Environment Configuration =====
+# Used when use_production=false (default) or when PROD_* variables are not set
+DEV_QDRANT_URL=http://localhost:6333
+DEV_QDRANT_API_KEY=
+DEV_QDRANT_VERIFY_SSL=false
+
+# ===== Production Environment Configuration =====
+# Used when use_production=true in API requests
+PROD_QDRANT_URL=https://qdrant.example.com:6333
+PROD_QDRANT_API_KEY=your-production-api-key-here
+PROD_QDRANT_VERIFY_SSL=true
+
+# ===== Fallback Configuration (Backward Compatibility) =====
+# Used if environment-specific (DEV_*/PROD_*) variables are not set
+QDRANT_URL=
+QDRANT_API_KEY=
+QDRANT_VERIFY_SSL=true
+QDRANT_HOST=192.168.153.47           # Legacy fallback
+
+# ===== SSL Configuration =====
+QDRANT_FORCE_IGNORE_SSL=false        # Force ignore SSL (dev only!)
+
+# ===== Other Services =====
+OLLAMA_HOST=192.168.153.46
 ```
 
 ### Configuration Details
 
+#### Core Settings
+
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `QDRANT_HOST` | string | `192.168.153.22` | Hostname or IP address of Qdrant server |
-| `OLLAMA_HOST` | string | `192.168.153.22` | Hostname or IP address of Ollama service |
-| `REQUEST_TIMEOUT` | int | `30` | Maximum seconds to wait for external service responses |
-| `CONTEXT_WINDOW_SIZE` | int | `5` | Default number of pages to retrieve before and after matched page |
+| `ENVIRONMENT` | string | `development` | Environment mode: "development" or "production" |
 | `DEBUG` | bool | `false` | Enable verbose logging for development/debugging |
+| `REQUEST_TIMEOUT` | int | `30` | Maximum seconds to wait for external service responses |
+| `OLLAMA_HOST` | string | `192.168.153.46` | Hostname or IP address of Ollama service |
+
+#### Development Environment (DEV_*)
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `DEV_QDRANT_URL` | string | `""` | Development Qdrant URL (e.g., http://localhost:6333) |
+| `DEV_QDRANT_API_KEY` | string | `""` | Development Qdrant API key (optional) |
+| `DEV_QDRANT_VERIFY_SSL` | bool | `false` | Verify SSL certificates in development |
+
+#### Production Environment (PROD_*)
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `PROD_QDRANT_URL` | string | `""` | Production Qdrant URL (must use https://) |
+| `PROD_QDRANT_API_KEY` | string | `""` | Production Qdrant API key (required in production) |
+| `PROD_QDRANT_VERIFY_SSL` | bool | `true` | Verify SSL certificates in production |
+
+#### Fallback Configuration
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `QDRANT_URL` | string | `""` | Generic Qdrant URL (used if DEV_*/PROD_* not set) |
+| `QDRANT_API_KEY` | string | `""` | Generic Qdrant API key |
+| `QDRANT_VERIFY_SSL` | bool | `true` | Generic SSL verification setting |
+| `QDRANT_HOST` | string | `192.168.153.47` | Legacy hostname (used if no URL provided) |
+| `QDRANT_FORCE_IGNORE_SSL` | bool | `false` | Force ignore SSL verification (overrides all other SSL settings) |
+
+### Configuration Priority
+
+The system uses the following priority order for each setting:
+
+1. **Request Parameters** (highest priority) - `qdrant_url`, `qdrant_api_key`, `qdrant_verify_ssl` in API request
+2. **Environment-Specific Variables** - `DEV_*` or `PROD_*` based on `use_production` flag
+3. **Generic Environment Variables** - `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_VERIFY_SSL`
+4. **Legacy Fallback** - `QDRANT_HOST` with `http://` prefix
+5. **Hardcoded Defaults** (lowest priority)
+
+### Dual Environment Setup
+
+Configure both development and production environments in the same `.env` file:
+
+```bash
+# Development (local testing)
+DEV_QDRANT_URL=http://localhost:6333
+DEV_QDRANT_API_KEY=
+DEV_QDRANT_VERIFY_SSL=false
+
+# Production (secure deployment)
+PROD_QDRANT_URL=https://qdrant.prod.example.com:6333
+PROD_QDRANT_API_KEY=prod-secret-key-12345
+PROD_QDRANT_VERIFY_SSL=true
+```
+
+Switch between environments using the `use_production` flag in API requests (see examples below).
 
 ### Connection Pooling
 
-The API uses connection pooling for efficiency:
-- **Qdrant Client**: Reused across requests via class-level `_qdrant_pool`
-- **Ollama Client**: Reused across requests via class-level `_ollama_pool`
+The API uses dual connection pooling for efficiency:
+- **Development Pool**: Reused across requests with `use_production=false`
+- **Production Pool**: Reused across requests with `use_production=true`
+- **Custom Clients**: Created per-request when using custom Qdrant parameters
+- **Ollama Client**: Single pool reused across all requests
 - **gRPC Protocol**: Used for Qdrant (faster than REST)
 - **Connection Timeout**: 10 seconds per connection
+
+### Security Best Practices
+
+1. **Production Mode**: Always use HTTPS with API key authentication
+2. **API Keys**: Store in environment variables, never commit to version control
+3. **SSL Verification**: Keep enabled in production (`PROD_QDRANT_VERIFY_SSL=true`)
+4. **Force Ignore SSL**: Only use `QDRANT_FORCE_IGNORE_SSL=true` for development with self-signed certificates
+5. **Secrets Management**: Consider using AWS Secrets Manager or HashiCorp Vault for production
+
+### Migration from v1
+
+Existing deployments continue to work without changes:
+
+```bash
+# v1 Configuration (still works)
+QDRANT_HOST=192.168.153.47
+OLLAMA_HOST=192.168.153.46
+
+# Migrate to v2 with HTTPS and API key
+QDRANT_URL=https://192.168.153.47:6333
+QDRANT_API_KEY=your-api-key
+QDRANT_VERIFY_SSL=true
+
+# Or use dual environment setup
+DEV_QDRANT_URL=http://192.168.153.47:6333
+PROD_QDRANT_URL=https://qdrant.prod.com:6333
+PROD_QDRANT_API_KEY=prod-key
+```
 
 ---
 
@@ -425,7 +527,25 @@ http://localhost:8000
 | `filter` | object | ❌ No | null | Metadata filters to narrow results |
 | `embedding_model` | string | ❌ No | `mxbai-embed-large` | Ollama embedding model name |
 | `limit` | integer | ❌ No | `5` | Maximum results per query (≥1) |
-| `context_window_size` | integer | ❌ No | `CONTEXT_WINDOW_SIZE` env var | Pages before/after match (≥1) |
+| `use_production` | boolean | ❌ No | `false` | Use production environment configuration (PROD_* variables) |
+| `qdrant_url` | string | ❌ No | null | Override Qdrant URL for this request |
+| `qdrant_api_key` | string | ❌ No | null | Override Qdrant API key for this request |
+| `qdrant_verify_ssl` | boolean | ❌ No | null | Override SSL verification for this request |
+
+**Filter Operators Reference**:
+
+| Operator | Type | Value Type | Logic | Description |
+|----------|------|------------|-------|-------------|
+| `match_text` | Text | string or array[string] | OR within field | Match text fields (single value or array for OR logic) |
+| `match_value` | Exact | any or array[any] | OR within field | Match exact values (numbers, booleans, strings, or arrays) |
+| `gte` | Range | number | - | Greater than or equal to (numeric fields only) |
+| `lte` | Range | number | - | Less than or equal to (numeric fields only) |
+
+**Filter Logic Rules**:
+- Multiple values in an array use **OR logic** (match ANY value)
+- Multiple fields use **AND logic** (ALL conditions must match)
+- Range operators (`gte`/`lte`) can be combined on the same field
+- All filter types can be combined in a single request
 
 **Response**:
 ```json
@@ -455,7 +575,7 @@ http://localhost:8000
 | `combined_page` | string | Concatenated text from all context pages |
 | `page_numbers` | array[integer] | List of page numbers included in context |
 
-**Example Request**:
+**Example Request (Basic)**:
 ```bash
 curl -X POST http://localhost:8000/search \
   -H "Content-Type: application/json" \
@@ -466,9 +586,67 @@ curl -X POST http://localhost:8000/search \
       "metadata.year": {"match_value": 2023}
     },
     "limit": 3,
-    "context_window_size": 2,
     "embedding_model": "mxbai-embed-large"
   }'
+```
+
+**Example Request (Using Development Environment - Default)**:
+```bash
+# Uses DEV_QDRANT_URL, DEV_QDRANT_API_KEY from .env
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection_name": "test_docs",
+    "search_queries": ["API authentication"],
+    "use_production": false,
+    "limit": 5
+  }'
+```
+
+**Example Request (Using Production Environment)**:
+```bash
+# Uses PROD_QDRANT_URL, PROD_QDRANT_API_KEY from .env
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection_name": "production_docs",
+    "search_queries": ["deployment strategies"],
+    "use_production": true,
+    "limit": 5
+  }'
+```
+
+**Example Request (Custom Qdrant Parameters)**:
+```bash
+# Override Qdrant connection for this request only
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection_name": "staging_docs",
+    "search_queries": ["testing procedures"],
+    "qdrant_url": "https://staging.qdrant.com:6333",
+    "qdrant_api_key": "staging-api-key",
+    "qdrant_verify_ssl": true,
+    "limit": 5
+  }'
+```
+
+**Example Request (Invalid - Conflicting Parameters)**:
+```bash
+# This will return HTTP 400 Bad Request
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection_name": "docs",
+    "search_queries": ["query"],
+    "use_production": true,
+    "qdrant_url": "https://custom.qdrant.com:6333"
+  }'
+
+# Error response:
+# {
+#   "detail": "Cannot use both use_production flag and custom Qdrant parameters"
+# }
 ```
 
 ---
@@ -1317,20 +1495,48 @@ curl -X POST "http://localhost:8000/simple-search" \
 }
 ```
 
-#### 5. Complex Composite Filters
+#### 5. Range Filters (Numeric Fields)
+```json
+{
+  "metadata.year": {
+    "gte": 2020,
+    "lte": 2024
+  },
+  "metadata.score": {
+    "gte": 0.8
+  }
+}
+```
+
+**Range Operators:**
+- `gte`: Greater than or equal to
+- `lte`: Less than or equal to
+- Can be used together or separately
+- Works with integer and float fields
+
+#### 6. Complex Composite Filters
 ```json
 {
   "metadata.document_type": {
     "match_text": ["report", "whitepaper"]
   },
   "metadata.year": {
-    "match_value": [2022, 2023]
+    "gte": 2022,
+    "lte": 2024
   },
-  "metadata.confidential": {
-    "match_value": false
+  "metadata.published": {
+    "match_value": true
+  },
+  "metadata.priority": {
+    "match_value": [1, 2, 3]
   }
 }
 ```
+
+**Filter Logic:**
+- Array values within a field use OR logic (match ANY value)
+- Multiple fields use AND logic (ALL conditions must match)
+- Range filters can be combined with other filter types
 
 ### Context Window Configuration
 

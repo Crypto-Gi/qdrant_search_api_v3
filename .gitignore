@@ -1,33 +1,14 @@
+# Environment variables and sensitive files
 .env
-# Ignore all .log files
-*.log
+.env.local
+.env.*.local
+*.env
 
-# Ignore a specific file
-config.json
-
-# Ignore a directory and its contents
-/build/
-/node_modules/
-
-# Ignore all files in the logs directory but keep the directory itself
-logs/*
-
-# Ignore all .env files (commonly used for environment variables)
-.env
-
-# Ignore IDE-specific files (e.g., from VS Code)
-.vscode/
-
-# Ignore system-specific files (e.g., macOS DS_Store)
-.DS_Store
-# Python .gitignore template
-
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Distribution / packaging
+*.so
 .Python
 build/
 develop-eggs/
@@ -41,19 +22,91 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
 
-# Unit test / coverage reports
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Test results
+test_results.log
+*.test.log
+
+# Docker
+docker-compose.override.yml
+
+# Backup files
+*.bak
+*.backup
+*_old*
+*_backup*
+test_confluence_style_old*.sh
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# API keys and credentials
+*_key.txt
+*_secret.txt
+credentials.json
+secrets.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Coverage reports
 htmlcov/
 .tox/
-.coverage*
-.cache*
-nosetests.xml*
-coverage.xml*
+.coverage
+.coverage.*
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
 
-# Environments 
-.env*
-venv*/
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Local configuration overrides
+config.local.json
+settings.local.json
