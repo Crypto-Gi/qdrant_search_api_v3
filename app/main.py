@@ -351,13 +351,17 @@ class SearchSystem:
             
             logger.debug(f"Fetching context: file={filename}, center={center_page_number}, range={page_range.gte}-{page_range.lte}")
             
+            # Calculate dynamic limit: 2 * window_size + 1 (center ± window)
+            # Max window_size=11 → 23 pages, supports larger context windows
+            max_pages = 2 * window_size + 1
+            
             scroll_result = self.qclient.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=models.Filter(
                     must=[
                         models.FieldCondition(
                             key="metadata.filename",
-                            match=models.MatchValue(value=filename)
+                            match=models.MatchText(text=filename)
                         ),
                         models.FieldCondition(
                             key="metadata.page_number",
@@ -366,7 +370,7 @@ class SearchSystem:
                     ]
                 ),
                 with_payload=True,
-                limit=11  # Fixed limit like old code
+                limit=max_pages
             )
             
             points = scroll_result[0]
@@ -549,6 +553,8 @@ class SearchSystem:
             results = []
             for query_response in batch_response:
                 query_results = []
+                seen_pages = set()  # Track (filename, page_number) to deduplicate across results
+                
                 for scored_point in query_response.points:
                     payload = scored_point.payload
                     
@@ -566,13 +572,23 @@ class SearchSystem:
                                 filename=payload["metadata"]["filename"],
                                 center_page_number=payload["metadata"]["page_number"]
                             )
-                            page_numbers = [p["metadata"]["page_number"] for p in context_pages]
+                            
+                            # Deduplicate: filter out pages already seen in previous results
+                            filename = payload["metadata"]["filename"]
+                            unique_pages = []
+                            for page in context_pages:
+                                page_id = (filename, page["metadata"]["page_number"])
+                                if page_id not in seen_pages:
+                                    unique_pages.append(page)
+                                    seen_pages.add(page_id)
+                            
+                            page_numbers = [p["metadata"]["page_number"] for p in unique_pages]
                             result = {
-                                "filename": payload["metadata"]["filename"],
+                                "filename": filename,
                                 "score": scored_point.score,
                                 "center_page": payload["metadata"]["page_number"],
-                                "combined_page": " ".join(p.get("pagecontent", "") for p in context_pages),
-                                "page_numbers": page_numbers[:11]
+                                "combined_page": " ".join(p.get("pagecontent", "") for p in unique_pages),
+                                "page_numbers": page_numbers
                             }
                         except (KeyError, TypeError) as e:
                             logger.warning(f"Skipping malformed page-based payload: {str(e)}")
@@ -711,6 +727,92 @@ async def search(request: Request, search_request: SearchRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
+        )
+
+class FilenameSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Fuzzy search query for filename")
+    collection_name: str = Field(..., min_length=1, description="Name of the Qdrant collection")
+    limit: Optional[conint(ge=1, le=100)] = Field(default=10, description="Maximum number of matching filenames to return")
+    use_production: Optional[bool] = Field(default=False, description="Use production environment configuration")
+    qdrant_url: Optional[str] = Field(default=None, description="Override Qdrant URL")
+    qdrant_api_key: Optional[str] = Field(default=None, description="Override Qdrant API key")
+    qdrant_verify_ssl: Optional[bool] = Field(default=None, description="Override SSL verification")
+
+@app.post("/search/filenames")
+async def search_filenames(request: FilenameSearchRequest):
+    """
+    Fuzzy search on metadata.filename field and return matching filenames.
+    Does not return page content - only unique filenames that match the query.
+    
+    Example: Searching "ecos 9.3" returns all files with "9.3" in the name.
+    """
+    correlation_id = str(uuid.uuid4())
+    logger.info("Filename search request received", extra={
+        "correlation_id": correlation_id,
+        "query": request.query,
+        "collection": request.collection_name,
+        "limit": request.limit
+    })
+    
+    try:
+        # Create Qdrant client
+        qclient = SearchSystem._create_qdrant_client(
+            qdrant_url=request.qdrant_url,
+            qdrant_api_key=request.qdrant_api_key,
+            qdrant_verify_ssl=request.qdrant_verify_ssl,
+            use_production=request.use_production
+        )
+        
+        # Use scroll with match_text filter for fuzzy filename matching
+        scroll_result = qclient.scroll(
+            collection_name=request.collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.filename",
+                        match=models.MatchText(text=request.query)
+                    )
+                ]
+            ),
+            limit=request.limit * 3,  # Get more to deduplicate
+            with_payload=True
+        )
+        
+        # Extract unique filenames
+        filenames_set = set()
+        results = []
+        
+        for point in scroll_result[0]:
+            if "metadata" in point.payload and "filename" in point.payload["metadata"]:
+                filename = point.payload["metadata"]["filename"]
+                if filename not in filenames_set:
+                    filenames_set.add(filename)
+                    results.append({
+                        "filename": filename,
+                        "score": point.score if hasattr(point, 'score') else None
+                    })
+                    
+                    # Stop when we have enough unique filenames
+                    if len(results) >= request.limit:
+                        break
+        
+        logger.info(f"Found {len(results)} unique matching filenames", extra={
+            "correlation_id": correlation_id
+        })
+        
+        return {
+            "query": request.query,
+            "total_matches": len(results),
+            "filenames": results
+        }
+    
+    except Exception as e:
+        logger.error(f"Filename search failed: {str(e)}", extra={
+            "correlation_id": correlation_id
+        })
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Filename search failed: {str(e)}"
         )
 
 if __name__ == "__main__":
