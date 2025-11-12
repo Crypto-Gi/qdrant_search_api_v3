@@ -1,4 +1,4 @@
-# MCP Server for Qdrant RAG Application
+# MCP Server for Docsplorer Application
 
 **Status**: ✅ Ready to Deploy  
 **Version**: 1.0.0

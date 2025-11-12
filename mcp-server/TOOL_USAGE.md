@@ -1,4 +1,4 @@
-# Qdrant RAG MCP Server - Tool Usage Guide
+# Docsplorer MCP Server - Tool Usage Guide
 
 Complete guide for LLMs to understand when and how to use each tool effectively.
 

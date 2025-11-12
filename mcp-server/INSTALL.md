@@ -1,4 +1,4 @@
-# Qdrant RAG MCP Server - Installation Guide
+# Docsplorer MCP Server - Installation Guide
 
 Complete installation instructions for Windsurf IDE with three deployment options.
 
@@ -9,7 +9,7 @@ Complete installation instructions for Windsurf IDE with three deployment option
 Before installing, ensure you have:
 
 1. **Windsurf IDE** installed
-2. **Qdrant RAG API** running (default: `http://localhost:8001`)
+2. **Docsplorer API** running (default: `http://localhost:8001`)
 3. One of the following (depending on deployment method):
    - **uv** (for uvx method) - Recommended
    - **Python 3.11+** and **pip** (for fastmcp method)
@@ -60,7 +60,7 @@ Open Windsurf settings and edit `mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "uvx",
       "args": [
         "--from",
@@ -98,7 +98,7 @@ In Windsurf, ask:
 What MCP tools are available?
 ```
 
-You should see 5 Qdrant RAG tools listed.
+You should see 5 Docsplorer tools listed.
 
 ---
 
@@ -131,7 +131,7 @@ Edit `mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "fastmcp",
       "args": [
         "run",
@@ -190,7 +190,7 @@ Edit `mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "docker",
       "args": [
         "run",
@@ -220,7 +220,7 @@ All configuration is done via `.env` file or `mcp_config.json` env section.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `API_URL` | ✅ Yes | `http://localhost:8001` | Your Qdrant RAG API endpoint |
+| `API_URL` | ✅ Yes | `http://localhost:8001` | Your Docsplorer API endpoint |
 | `API_KEY` | ❌ No | - | Optional API authentication |
 | `QDRANT_COLLECTION` | ✅ Yes | `content` | Qdrant collection name |
 | `QDRANT_HOST` | ❌ No | - | Override Qdrant host (optional) |
@@ -256,13 +256,13 @@ In Windsurf, ask:
 What MCP servers are running?
 ```
 
-Expected: `qdrant-rag` should be listed and active.
+Expected: `docsplorer` should be listed and active.
 
 ### Test 2: List Available Tools
 
 Ask:
 ```
-What tools does the qdrant-rag MCP server provide?
+What tools does the docsplorer MCP server provide?
 ```
 
 Expected: 5 tools listed:
@@ -276,7 +276,7 @@ Expected: 5 tools listed:
 
 Ask:
 ```
-Use qdrant-rag to search for files about "ECOS 9.3"
+Use docsplorer to search for files about "ECOS 9.3"
 ```
 
 Expected: List of matching filenames.
@@ -296,7 +296,7 @@ Expected: Relevant passages with page context.
 
 ### Server Not Starting
 
-**Symptom**: `qdrant-rag` not listed in MCP servers
+**Symptom**: `docsplorer` not listed in MCP servers
 
 **Solutions**:
 1. Check Windsurf logs: `View > Output > MCP`
@@ -353,7 +353,7 @@ Expected: Relevant passages with page context.
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "uvx",
       "args": [
         "--from",
@@ -388,7 +388,7 @@ Expected: Relevant passages with page context.
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "uvx",
       "args": [
         "--from",
@@ -451,4 +451,4 @@ After installation:
 
 **Installation Complete!** 🎉
 
-Your Qdrant RAG MCP server is now ready to use in Windsurf.
+Your Docsplorer MCP server is now ready to use in Windsurf.

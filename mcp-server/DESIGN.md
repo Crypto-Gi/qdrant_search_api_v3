@@ -1,4 +1,4 @@
-# MCP Server for Qdrant RAG Application - Design Document
+# MCP Server for Docsplorer Application - Design Document
 
 **Version:** 1.0  
 **Date:** November 12, 2025  

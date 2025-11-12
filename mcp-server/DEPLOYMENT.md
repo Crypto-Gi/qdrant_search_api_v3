@@ -1,6 +1,6 @@
 # MCP Server Deployment Guide
 
-Three deployment options for the Qdrant RAG MCP Server. Choose what works best for you!
+Three deployment options for the Docsplorer MCP Server. Choose what works best for you!
 
 ---
 
@@ -41,7 +41,7 @@ Add to `mcp_config.json` (replace `/path/to/` with your actual clone location):
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "uvx",
       "args": [
         "--from",
@@ -112,7 +112,7 @@ Add to `mcp_config.json` (replace `/path/to/` with your actual clone location):
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "fastmcp",
       "args": [
         "run",
@@ -180,7 +180,7 @@ Add to `mcp_config.json` (replace `/path/to/` with your actual clone location):
 ```json
 {
   "mcpServers": {
-    "qdrant-rag": {
+    "docsplorer": {
       "command": "docker",
       "args": [
         "run",
