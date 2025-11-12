@@ -8,6 +8,7 @@ Provides 5 tools for document search, filtering, and version comparison.
 import httpx
 from fastmcp import FastMCP
 from config import MCPConfig
+from typing import Optional
 
 # Initialize MCP server and config
 mcp = FastMCP("Qdrant RAG Search")
@@ -17,7 +18,7 @@ config = MCPConfig()
 @mcp.tool()
 async def search_filenames_fuzzy(
     query: str,
-    limit: int = 5
+    limit: Optional[int] = None
 ) -> dict:
     """
     Fuzzy search for filenames in the document collection.
@@ -27,7 +28,7 @@ async def search_filenames_fuzzy(
     
     Args:
         query: Filename search term (e.g., "ecos 9.3", "release notes")
-        limit: Maximum number of filenames to return (default: 5)
+        limit: Maximum number of filenames to return (default: from .env DEFAULT_LIMIT)
         
     Returns:
         dict: {"query": str, "total_matches": int, "filenames": [{"filename": str, "score": float}]}
@@ -42,7 +43,7 @@ async def search_filenames_fuzzy(
             json={
                 "query": query,
                 "collection_name": config.qdrant_collection,
-                "limit": limit,
+                "limit": limit or config.default_limit,
                 "use_production": config.use_production
             },
             headers=config.get_headers()
@@ -55,8 +56,8 @@ async def search_filenames_fuzzy(
 async def search_with_filename_filter(
     query: str,
     filename_filter: str,
-    limit: int = 2,
-    context_window: int = 5
+    limit: Optional[int] = None,
+    context_window: Optional[int] = None
 ) -> dict:
     """
     Search within a specific document with semantic matching.
@@ -67,8 +68,8 @@ async def search_with_filename_filter(
     Args:
         query: Search query (e.g., "security vulnerabilities", "DHCP configuration")
         filename_filter: Exact or partial filename to search within
-        limit: Maximum results to return (default: 2)
-        context_window: Pages before/after match to include (0-11, default: 5)
+        limit: Maximum results to return (default: from .env DEFAULT_LIMIT)
+        context_window: Pages before/after match to include (0-11, default: from .env DEFAULT_CONTEXT_WINDOW)
         
     Returns:
         dict: {
@@ -110,20 +111,20 @@ async def search_with_filename_filter(
 async def search_multi_query_with_filter(
     queries: list[str],
     filename_filter: str,
-    limit: int = 2,
-    context_window: int = 5
+    limit: Optional[int] = None,
+    context_window: Optional[int] = None
 ) -> dict:
     """
-    Search multiple queries within a single document simultaneously.
+    Run multiple semantic searches within a single document.
     
-    Efficient for finding multiple related topics in one document.
-    Each query returns independent results with deduplication across results.
+    Efficient batch processing for analyzing different aspects of the same document.
+    Returns separate results for each query.
     
     Args:
-        queries: List of search queries (e.g., ["DHCP", "routing", "VLAN"])
+        queries: List of search queries (e.g., ["security", "performance", "bugs"])
         filename_filter: Exact or partial filename to search within
-        limit: Maximum results per query (default: 2)
-        context_window: Pages before/after match to include (0-11, default: 5)
+        limit: Maximum results per query (default: from .env DEFAULT_LIMIT)
+        context_window: Pages before/after match to include (0-11, default: from .env DEFAULT_CONTEXT_WINDOW)
         
     Returns:
         dict: {
@@ -162,20 +163,20 @@ async def search_multi_query_with_filter(
 async def search_across_multiple_files(
     query: str,
     filename_filters: list[str],
-    limit: int = 2,
-    context_window: int = 5
+    limit: Optional[int] = None,
+    context_window: Optional[int] = None
 ) -> dict:
     """
-    Search the same query across multiple documents.
+    Search for the same topic across multiple documents.
     
-    Useful for comparing how different documents address the same topic.
-    Returns results grouped by filename.
+    Useful for finding how a topic is covered in different versions or products.
+    Returns combined results from all specified files.
     
     Args:
         query: Single search query to run across all files
-        filename_filters: List of filenames to search (e.g., ["ECOS_9.3.6.0", "ECOS_9.3.3.2"])
-        limit: Maximum results per file (default: 2)
-        context_window: Pages before/after match to include (0-11, default: 5)
+        filename_filters: List of filename patterns to search within
+        limit: Maximum results per file (default: from .env DEFAULT_LIMIT)
+        context_window: Pages before/after match to include (0-11, default: from .env DEFAULT_CONTEXT_WINDOW)
         
     Returns:
         dict: {
@@ -225,21 +226,21 @@ async def compare_versions(
     query: str,
     version1_filter: str,
     version2_filter: str,
-    limit: int = 2,
-    context_window: int = 5
+    limit: Optional[int] = None,
+    context_window: Optional[int] = None
 ) -> dict:
     """
-    Compare how two document versions address the same topic.
+    Compare how a topic appears in two different versions.
     
-    Specialized tool for version comparison (e.g., release notes across versions).
-    Returns side-by-side results for easy comparison.
+    Specialized tool for version comparison and evolution tracking.
+    Returns side-by-side results from both versions.
     
     Args:
-        query: Search query (e.g., "security fixes", "new features")
-        version1_filter: First version filename filter
-        version2_filter: Second version filename filter
-        limit: Maximum results per version (default: 2)
-        context_window: Pages before/after match to include (0-11, default: 5)
+        query: Topic to compare (e.g., "DHCP security", "performance improvements")
+        version1_filter: Filename pattern for first version
+        version2_filter: Filename pattern for second version
+        limit: Maximum results per version (default: from .env DEFAULT_LIMIT)
+        context_window: Pages before/after match to include (0-11, default: from .env DEFAULT_CONTEXT_WINDOW)
         
     Returns:
         dict: {
