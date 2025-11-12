@@ -402,17 +402,22 @@ We use existing FastAPI endpoints to:
 ### 30-Second Setup (uvx):
 
 ```bash
-# 1. Install uv
+# 1. Clone repo
+git clone https://github.com/Crypto-Gi/qdrant-semantic-search-api.git
+cd qdrant-semantic-search-api/mcp-server
+
+# 2. Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Configure
+# 3. Configure
 cp .env.example .env
 # Edit .env with your API_URL
 
-# 3. Add to Windsurf/Claude Desktop mcp_config.json
-# (See DEPLOYMENT.md for config)
+# 4. Add to Windsurf/Claude Desktop mcp_config.json
+# Use: /path/to/qdrant-semantic-search-api/mcp-server/server.py
+# (See DEPLOYMENT.md for full config)
 
-# 4. Restart your AI assistant
+# 5. Restart your AI assistant
 ```
 
 ---

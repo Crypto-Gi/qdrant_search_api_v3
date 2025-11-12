@@ -14,14 +14,20 @@ Three deployment options for the Qdrant RAG MCP Server. Choose what works best f
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Configuration
+### Setup
 
-1. **Copy environment template**:
+1. **Clone the repository**:
+```bash
+git clone https://github.com/Crypto-Gi/qdrant-semantic-search-api.git
+cd qdrant-semantic-search-api/mcp-server
+```
+
+2. **Copy environment template**:
 ```bash
 cp .env.example .env
 ```
 
-2. **Edit `.env`** with your settings:
+3. **Edit `.env`** with your settings:
 ```bash
 API_URL=http://localhost:8001
 QDRANT_COLLECTION=content
@@ -30,7 +36,7 @@ EMBEDDING_MODEL=bge-m3
 
 ### Windsurf/Claude Desktop Config
 
-Add to `mcp_config.json`:
+Add to `mcp_config.json` (replace `/path/to/` with your actual clone location):
 
 ```json
 {
@@ -42,7 +48,7 @@ Add to `mcp_config.json`:
         "fastmcp",
         "fastmcp",
         "run",
-        "/home/mir/projects/qdrant-semantic-search-api/mcp-server/server.py"
+        "/path/to/qdrant-semantic-search-api/mcp-server/server.py"
       ],
       "disabled": false,
       "env": {
@@ -54,6 +60,11 @@ Add to `mcp_config.json`:
     }
   }
 }
+```
+
+**Example for common locations**:
+- Linux/Mac: `/home/username/qdrant-semantic-search-api/mcp-server/server.py`
+- Windows: `C:\Users\username\qdrant-semantic-search-api\mcp-server\server.py`
 ```
 
 ### Pros & Cons
@@ -79,16 +90,24 @@ Add to `mcp_config.json`:
 pip install fastmcp httpx python-dotenv
 ```
 
-### Configuration
+### Setup
 
-1. **Copy environment template**:
+1. **Clone the repository**:
+```bash
+git clone https://github.com/Crypto-Gi/qdrant-semantic-search-api.git
+cd qdrant-semantic-search-api/mcp-server
+```
+
+2. **Copy environment template**:
 ```bash
 cp .env.example .env
 ```
 
-2. **Edit `.env`** with your settings
+3. **Edit `.env`** with your settings
 
 ### Windsurf/Claude Desktop Config
+
+Add to `mcp_config.json` (replace `/path/to/` with your actual clone location):
 
 ```json
 {
@@ -97,7 +116,7 @@ cp .env.example .env
       "command": "fastmcp",
       "args": [
         "run",
-        "/home/mir/projects/qdrant-semantic-search-api/mcp-server/server.py"
+        "/path/to/qdrant-semantic-search-api/mcp-server/server.py"
       ],
       "disabled": false,
       "env": {
@@ -136,20 +155,27 @@ docker --version
 
 ### Setup
 
-1. **Copy environment template**:
+1. **Clone the repository**:
+```bash
+git clone https://github.com/Crypto-Gi/qdrant-semantic-search-api.git
+cd qdrant-semantic-search-api/mcp-server
+```
+
+2. **Copy environment template**:
 ```bash
 cp .env.example .env
 ```
 
-2. **Edit `.env`** with your settings
+3. **Edit `.env`** with your settings
 
-3. **Build Docker image**:
+4. **Build Docker image**:
 ```bash
-cd /home/mir/projects/qdrant-semantic-search-api/mcp-server
 docker build -t qdrant-mcp-server .
 ```
 
 ### Windsurf/Claude Desktop Config
+
+Add to `mcp_config.json` (replace `/path/to/` with your actual clone location):
 
 ```json
 {
@@ -163,7 +189,7 @@ docker build -t qdrant-mcp-server .
         "--network",
         "host",
         "--env-file",
-        "/home/mir/projects/qdrant-semantic-search-api/mcp-server/.env",
+        "/path/to/qdrant-semantic-search-api/mcp-server/.env",
         "qdrant-mcp-server"
       ],
       "disabled": false
@@ -291,23 +317,28 @@ docker logs qdrant-mcp-server
 
 ### For First-Time Users:
 
-1. **Install uv**:
+1. **Clone repository**:
+```bash
+git clone https://github.com/Crypto-Gi/qdrant-semantic-search-api.git
+cd qdrant-semantic-search-api/mcp-server
+```
+
+2. **Install uv**:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-2. **Configure**:
+3. **Configure**:
 ```bash
-cd /home/mir/projects/qdrant-semantic-search-api/mcp-server
 cp .env.example .env
 # Edit .env with your settings
 ```
 
-3. **Add to Windsurf** (Option 1 config above)
+4. **Add to Windsurf** (Option 1 config above, update path to your clone location)
 
-4. **Restart Windsurf**
+5. **Restart Windsurf**
 
-5. **Test**: Ask "What files are available about ECOS 9.3?"
+6. **Test**: Ask "What files are available about ECOS 9.3?"
 
 ---
 
