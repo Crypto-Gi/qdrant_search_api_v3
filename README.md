@@ -135,6 +135,75 @@ curl -X POST http://localhost:8001/search \
 
 ## 📚 API Documentation
 
+### POST /search/filenames
+
+**Fuzzy search on metadata.filename field and return matching filenames. Does not return page content - only unique filenames that match the query.**
+
+#### Request Body
+```json
+{
+  "query": "string (required, min 1)",
+  "collection_name": "string (required, min 1)",
+  "limit": "integer (optional, default 10, max 1000)",
+  "use_production": "boolean (optional, default false)",
+  "qdrant_url": "string (optional, override)",
+  "qdrant_api_key": "string (optional, override)",
+  "qdrant_verify_ssl": "boolean (optional, override)"
+}
+```
+
+#### Response
+```json
+{
+  "query": "ecos 9.3",
+  "total_matches": 5,
+  "filenames": [
+    {
+      "filename": "ECOS_9.3.7.0_Release_Notes_RevB",
+      "score": null
+    }
+  ]
+}
+```
+
+#### Examples
+
+**Basic Filename Discovery:**
+```bash
+curl -X POST http://localhost:8001/search/filenames \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "ecos 9.3",
+    "collection_name": "content",
+    "limit": 10
+  }'
+```
+
+**Production Environment:**
+```bash
+curl -X POST http://localhost:8001/search/filenames \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "ECOS_9.3.7.0_Release_Notes_RevB",
+    "collection_name": "content",
+    "limit": 1,
+    "use_production": true
+  }'
+```
+
+**Custom Qdrant Instance:**
+```bash
+curl -X POST http://localhost:8001/search/filenames \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "release notes",
+    "collection_name": "my_collection",
+    "limit": 100,
+    "qdrant_url": "https://my-qdrant.cloud:6333",
+    "qdrant_api_key": "my-secret-key"
+  }'
+```
+
 ### POST /search
 
 **Semantic search with advanced filtering and configuration options.**

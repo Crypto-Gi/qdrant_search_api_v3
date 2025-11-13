@@ -732,7 +732,7 @@ async def search(request: Request, search_request: SearchRequest):
 class FilenameSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Fuzzy search query for filename")
     collection_name: str = Field(..., min_length=1, description="Name of the Qdrant collection")
-    limit: Optional[conint(ge=1, le=100)] = Field(default=10, description="Maximum number of matching filenames to return")
+    limit: Optional[conint(ge=1, le=1000)] = Field(default=10, description="Maximum number of matching filenames to return")
     use_production: Optional[bool] = Field(default=False, description="Use production environment configuration")
     qdrant_url: Optional[str] = Field(default=None, description="Override Qdrant URL")
     qdrant_api_key: Optional[str] = Field(default=None, description="Override Qdrant API key")
