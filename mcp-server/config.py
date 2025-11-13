@@ -6,6 +6,10 @@ Handles environment variables and provides fallback to app defaults.
 
 import os
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class MCPConfig:

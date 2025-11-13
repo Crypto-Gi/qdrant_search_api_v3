@@ -308,9 +308,85 @@ curl -X POST http://localhost:8001/search \
 }
 ```
 
+## 🔐 API Key Authentication
+
+### Overview
+All API endpoints support optional API key authentication using Bearer tokens. When enabled, all requests must include an `Authorization` header.
+
+### Setup
+
+#### 1. Generate API Key
+```bash
+# Generate a secure random API key
+openssl rand -hex 32
+```
+
+#### 2. Configure Environment Variables
+```env
+# Enable API key authentication
+API_KEY_ENABLED=true
+
+# Your secret API key
+API_KEY=your-generated-api-key-here
+```
+
+#### 3. Make Authenticated Requests
+```bash
+# Include Authorization header in all requests
+curl -X POST http://localhost:8001/search/filenames \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key-here" \
+  -d '{
+    "query": "ecos",
+    "collection_name": "content",
+    "limit": 10
+  }'
+```
+
+### Security Features
+
+- ✅ **Bearer Token Authentication** - Industry standard (same as AWS, GitHub, Stripe)
+- ✅ **HTTPS Encrypted** - API keys are encrypted in transit when using HTTPS
+- ✅ **Optional Authentication** - Can be disabled for development (`API_KEY_ENABLED=false`)
+- ✅ **All Endpoints Protected** - `/search`, `/search/filenames`, and `/health` all require authentication when enabled
+
+### Error Responses
+
+**Missing API Key (401 Unauthorized):**
+```json
+{"detail": "Missing authentication credentials"}
+```
+
+**Invalid API Key (403 Forbidden):**
+```json
+{"detail": "Invalid API key"}
+```
+
+### MCP Server Configuration
+
+The MCP server automatically includes the API key in all requests when configured:
+
+```env
+# mcp-server/.env
+API_KEY=your-api-key-here
+```
+
+The MCP server `config.py` automatically adds the `Authorization: Bearer <API_KEY>` header to all HTTP requests.
+
+---
+
 ## ⚙️ Configuration
 
 ### Environment Variables
+
+#### API Key Authentication
+```env
+# Enable/disable API key authentication
+API_KEY_ENABLED=false
+
+# Your secret API key (generate with: openssl rand -hex 32)
+API_KEY=
+```
 
 #### Ollama Configuration
 ```env

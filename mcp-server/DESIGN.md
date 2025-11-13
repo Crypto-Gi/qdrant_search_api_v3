@@ -433,80 +433,104 @@ Create an MCP server that exposes specialized tools for:
 
 ---
 
-### Phase 2: Optimization (Future)
+### Phase 2: Standalone Deployment & Security (Current)
 
-**Goal**: Optimize for production use at scale
+**Goal**: Make MCP server standalone and production-ready with authentication
 
 **Tasks**:
 
-1. **TOON Format Integration**
+1. **Separate GitHub Repository**
+   - [ ] Create new repo: `docsplorer-mcp-server`
+   - [ ] Move MCP server code to standalone repo
+   - [ ] Add comprehensive README with setup instructions
+   - [ ] Include Docker deployment options
+   - [ ] Document API endpoint configuration
+
+2. **API Key Authentication**
+   - [ ] Add API key auth to `/search` endpoint
+   - [ ] Add API key auth to `/search/filenames` endpoint
+   - [ ] Add API key auth to `/health` endpoint
+   - [ ] Implement Bearer token validation
+   - [ ] Add API key generation script
+
+3. **MCP Server API Key Support**
+   - [ ] Add `API_KEY` environment variable support
+   - [ ] Update config.py to handle API keys
+   - [ ] Add API key to HTTP headers in all requests
+   - [ ] Support IDE config environment variables
+   - [ ] Document API key setup in INSTALL.md
+
+4. **Version Discovery via Fuzzy Search**
+   - [x] Use `search_filenames_fuzzy` with limit=1000
+   - [x] No additional tool needed
+   - [ ] Document discovery patterns in TOOL_USAGE.md
+
+**Deliverables**:
+- ✅ Standalone GitHub repository
+- ✅ API key authentication on all endpoints
+- ✅ Configurable API endpoint URL
+- ✅ Downloadable and usable from anywhere
+- ✅ Production-ready security
+
+**Notes**:
+- Version Discovery tool NOT needed - use `search_filenames_fuzzy("", limit=1000)` to get all files
+- TOON Format, SSE Transport, Performance Optimization moved to Phase 3
+
+---
+
+### Phase 3: Advanced Optimization (Future)
+
+**Goal**: Optimize for production scale and add advanced capabilities
+
+**Tasks**:
+
+1. **TOON Format Integration** (moved from Phase 2)
    - [ ] Implement TOON encoder
    - [ ] Convert tool outputs to TOON format
-   - [ ] Benchmark token savings
+   - [ ] Benchmark token savings (target: 50%)
    - [ ] A/B test with LLMs
 
-2. **SSE Transport**
+2. **SSE Transport** (moved from Phase 2)
    - [ ] Add SSE transport support
    - [ ] Implement authentication
    - [ ] Set up HTTPS/SSL
    - [ ] Test remote access
 
-3. **Additional Tool: Version Discovery**
-   - [ ] Implement Tool 6: `get_available_versions`
-   - [ ] Use existing `/search/filenames` endpoint with wildcard
-   - [ ] Parse and organize filenames by product/version
-   - [ ] Test with Claude Desktop
-   - [ ] Document usage patterns
-
-4. **Performance Optimization**
+3. **Performance Optimization** (moved from Phase 2)
    - [ ] Add response caching
    - [ ] Implement request batching
    - [ ] Optimize HTTP connection pooling
    - [ ] Add rate limiting
 
-5. **Monitoring & Analytics**
+4. **Monitoring & Analytics** (moved from Phase 2)
    - [ ] Add usage metrics
    - [ ] Track token consumption
    - [ ] Monitor API latency
    - [ ] Create dashboards
 
-**Deliverables**:
-- ✅ 6 total tools (including version discovery)
-- ✅ 50% token reduction with TOON
-- ✅ Remote access via HTTPS
-- ✅ Production monitoring
-- ✅ Performance benchmarks
-
----
-
-### Phase 3: Advanced Features (Future)
-
-**Goal**: Add advanced capabilities for power users
-
-**Tasks**:
-
-1. **Additional Tools**
-   - [ ] `quick_check_exists` - Fast keyword validation (check if topics exist before deep search)
-   - [ ] `get_document_structure` - Document metadata (total pages, sections)
+5. **Additional Tools**
+   - [ ] `quick_check_exists` - Fast keyword validation
+   - [ ] `get_document_structure` - Document metadata
    - [ ] `extract_table_of_contents` - Parse document structure
 
-2. **Enhanced Search**
+6. **Enhanced Search**
    - [ ] Semantic clustering of results
    - [ ] Automatic query expansion
    - [ ] Relevance feedback
    - [ ] Cross-reference detection
 
-3. **Multi-Collection Support**
+7. **Multi-Collection Support**
    - [ ] Support custom collections
    - [ ] Cross-collection search
    - [ ] Collection management tools
    - [ ] Dynamic collection discovery
 
 **Deliverables**:
-- ✅ 9 total tools (6 from Phase 1-2 + 3 advanced)
+- ✅ 50% token reduction with TOON
+- ✅ Remote access via HTTPS
+- ✅ Production monitoring
 - ✅ Advanced search features
 - ✅ Multi-collection support
-- ✅ Enhanced document navigation
 
 ---
 

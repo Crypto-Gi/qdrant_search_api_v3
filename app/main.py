@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, status, Request
+from fastapi import FastAPI, HTTPException, status, Request, Security, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, conint
 from typing import List, Optional, Dict, Union, Any
 import logging
@@ -43,6 +44,10 @@ CONTEXT_WINDOW_SIZE = int(os.getenv("CONTEXT_WINDOW_SIZE", "5"))
 # Embedding configuration
 DEFAULT_EMBEDDING_MODEL = os.getenv("DEFAULT_EMBEDDING_MODEL", "mxbai-embed-large")
 DEFAULT_VECTOR_SIZE = int(os.getenv("DEFAULT_VECTOR_SIZE", "1024"))
+
+# API Key Authentication
+API_KEY = os.getenv("API_KEY", "")
+API_KEY_ENABLED = os.getenv("API_KEY_ENABLED", "false").lower() == "true"
 # ===============================
 
 # ======== Logging Setup ========
@@ -106,6 +111,42 @@ def validate_production_config():
 
 # Validate configuration at startup
 validate_production_config()
+# ===============================
+
+# ======== API Key Authentication ========
+security = HTTPBearer(auto_error=False)
+
+async def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """
+    Verify API key from Authorization header.
+    If API_KEY_ENABLED is false, authentication is bypassed.
+    """
+    if not API_KEY_ENABLED:
+        # API key authentication is disabled
+        return True
+    
+    if not API_KEY:
+        logger.error("API_KEY_ENABLED is true but API_KEY is not configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API key authentication is enabled but not configured"
+        )
+    
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    if credentials.credentials != API_KEY:
+        logger.warning("Invalid API key attempt")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid API key"
+        )
+    
+    return True
 # ===============================
 
 # ======== Exception Classes ========
@@ -663,7 +704,7 @@ async def add_correlation_id(request: Request, call_next):
     return response
 
 @app.get("/health")
-async def health_check():
+async def health_check(authenticated: bool = Depends(verify_api_key)):
     return {
         "status": "ok",
         "services": {
@@ -673,7 +714,7 @@ async def health_check():
     }
 
 @app.post("/search", status_code=status.HTTP_200_OK)
-async def search(request: Request, search_request: SearchRequest):
+async def search(request: Request, search_request: SearchRequest, authenticated: bool = Depends(verify_api_key)):
     try:
         # Log request with connection configuration
         logger.info("Search request received", extra={
@@ -739,7 +780,7 @@ class FilenameSearchRequest(BaseModel):
     qdrant_verify_ssl: Optional[bool] = Field(default=None, description="Override SSL verification")
 
 @app.post("/search/filenames")
-async def search_filenames(request: FilenameSearchRequest):
+async def search_filenames(request: FilenameSearchRequest, authenticated: bool = Depends(verify_api_key)):
     """
     Fuzzy search on metadata.filename field and return matching filenames.
     Does not return page content - only unique filenames that match the query.
